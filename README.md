@@ -1,3 +1,8 @@
+Original program, but with Source Engine vtex.exe support.
+Program outputs each frame of 3D noise as separate file now, instead of atlas.
+Each file has correct postfix (_zXXX.tga) where XXX is frame number, so vtex.exe can eat them easily.
+Also, program outputs txt script with correct compile settings for vtex.
+
 Tileable Volume Noise
 ---------------------
 

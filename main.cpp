@@ -38,7 +38,7 @@ void writeTGA(const char* fileName, int width, int height, /*const*/ unsigned ch
 	}
 }
 
-void writeDefaultVtexScript( const char* fileName, int volTextureSize )
+void writeDefaultVtexScript( const char* fileName, int volTextureSize, bool bPacked )
 {
 	char pVolumetextureParam[32];
 	sprintf( pVolumetextureParam, "volumetexture %d\n", volTextureSize );
@@ -47,6 +47,12 @@ void writeDefaultVtexScript( const char* fileName, int volTextureSize )
 	txtscript.open( fileName );
 	txtscript << pVolumetextureParam;
 	txtscript << "nocompress 1;\n";
+
+	if( bPacked )
+	{
+		txtscript << "numchannels 1;\n";
+	}
+
 	txtscript.close();
 }
 
@@ -232,9 +238,10 @@ int main (int argc, char *argv[])
 		int width = cloudBaseShapeTextureSize;
 		int height = cloudBaseShapeTextureSize;
 
+		char pName[256];
+
 		for( int i = 0; i < cloudBaseShapeTextureSize; i++ )
 		{
-			char pName[256];
 			sprintf( pName, "%s/noiseShape_z%03d.tga", OUTPUT_FOLDER_BASENOISE, i );
 
 			writeTGA( pName, width, height, &cloudBaseShapeTexels[cloudBaseShapeSliceBytes * i] );
@@ -242,7 +249,6 @@ int main (int argc, char *argv[])
 
 		for( int i = 0; i < cloudBaseShapeTextureSize; i++ )
 		{
-			char pName[256];
 			sprintf( pName, "%s/noiseShape_packed_z%03d.tga", OUTPUT_FOLDER_BASENOISE, i );
 
 			writeTGA( pName, width, height, &cloudBaseShapeTexelsPacked[cloudBaseShapeSliceBytes * i] );
@@ -251,10 +257,10 @@ int main (int argc, char *argv[])
 		// generate a .txt script for vtex.exe
 		char pTxtName[256];
 		sprintf( pTxtName, "%s/noiseShape.txt", OUTPUT_FOLDER_BASENOISE );
-		writeDefaultVtexScript( pTxtName, 128 );
+		writeDefaultVtexScript( pTxtName, 128, false );
 
 		sprintf( pTxtName, "%s/noiseShape_packed.txt", OUTPUT_FOLDER_BASENOISE );
-		writeDefaultVtexScript( pTxtName, 128 );
+		writeDefaultVtexScript( pTxtName, 128, true );
 #else
 		int width = cloudBaseShapeTextureSize*cloudBaseShapeTextureSize;
 		int height = cloudBaseShapeTextureSize;
@@ -333,9 +339,10 @@ int main (int argc, char *argv[])
 		int width = cloudErosionTextureSize;
 		int height = cloudErosionTextureSize;
 
+		char pName[256];
+
 		for( int i = 0; i < cloudErosionTextureSize; i++ )
 		{
-			char pName[256];
 			sprintf( pName, "%s/noiseErosion_z%03d.tga", OUTPUT_FOLDER_EROSION, i );
 
 			writeTGA( pName, width, height, &cloudErosionTexels[cloudErosionSliceBytes * i] );
@@ -343,7 +350,6 @@ int main (int argc, char *argv[])
 
 		for( int i = 0; i < cloudErosionTextureSize; i++ )
 		{
-			char pName[256];
 			sprintf( pName, "%s/noiseErosion_packed_z%03d.tga", OUTPUT_FOLDER_EROSION, i );
 
 			writeTGA( pName, width, height, &cloudErosionTexelsPacked[cloudErosionSliceBytes * i] );
@@ -352,10 +358,10 @@ int main (int argc, char *argv[])
 		// generate a .txt script for vtex.exe
 		char pTxtName[256];
 		sprintf( pTxtName, "%s/noiseErosion.txt", OUTPUT_FOLDER_EROSION );
-		writeDefaultVtexScript( pTxtName, 32 );
+		writeDefaultVtexScript( pTxtName, 32, false );
 
 		sprintf( pTxtName, "%s/noiseErosion_packed.txt", OUTPUT_FOLDER_EROSION );
-		writeDefaultVtexScript( pTxtName, 32 );
+		writeDefaultVtexScript( pTxtName, 32, true );
 #else
 		int width = cloudErosionTextureSize*cloudErosionTextureSize;
 		int height = cloudErosionTextureSize;

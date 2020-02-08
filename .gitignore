@@ -6,6 +6,8 @@ debug
 *.db
 *.png
 *.opendb
+*.exe
+*.user
 
 \.vs/*
 
