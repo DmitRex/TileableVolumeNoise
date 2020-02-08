@@ -3,6 +3,10 @@
 #include <iostream>
 #include <time.h>
 #include <math.h>
+#include <windows.h>
+#include <stdio.h>
+#include <iostream>
+#include <fstream>
 
 #include "./TileableVolumeNoise.h"
 #include "./libtarga.h"
@@ -10,13 +14,40 @@
 #include <ppl.h>
 using namespace concurrency;
 
+#define OUTPUT_FOLDER_BASENOISE "Generated_Base"
+#define OUTPUT_FOLDER_EROSION "Generated_Erosion"
+
+// outputs each frame as separate .tga with _zXXX postfix so Vtex.exe can eat them directly
+#define SOURCE_ENGINE_VTEX 1
+
 void writeTGA(const char* fileName, int width, int height, /*const*/ unsigned char* data)
 {
-	if (!tga_write_raw(fileName, width, height, data, TGA_TRUECOLOR_32))
+	char *pDir = strtok( strdup( fileName ), "/" );
+
+	if( !pDir || CreateDirectory( pDir ,NULL ) || ERROR_ALREADY_EXISTS == GetLastError() )
 	{
-		printf("Failed to write image!\n");
-		printf(tga_error_string(tga_get_last_error()));
+		if (!tga_write_raw(fileName, width, height, data, TGA_TRUECOLOR_32))
+		{
+			printf("Failed to write image!\n");
+			printf(tga_error_string(tga_get_last_error()));
+		}
 	}
+	else
+	{
+		printf("Failed to create directroy %s!\n", pDir );
+	}
+}
+
+void writeDefaultVtexScript( const char* fileName, int volTextureSize )
+{
+	char pVolumetextureParam[32];
+	sprintf( pVolumetextureParam, "volumetexture %d\n", volTextureSize );
+
+	std::ofstream txtscript;
+	txtscript.open( fileName );
+	txtscript << pVolumetextureParam;
+	txtscript << "nocompress 1;\n";
+	txtscript.close();
 }
 
 // the remap function used in the shaders as described in Gpu Pro 7. It must match when using pre packed textures
@@ -27,6 +58,16 @@ float remap(float originalValue, float originalMin, float originalMax, float new
 
 int main (int argc, char *argv[])
 {   
+	printf( "Noise Generation Has Started. Please wait...\n" );
+
+	bool bPerlinWorleyAltRemap = false;
+
+	if( argc > 1 && !stricmp( argv[1], "-altremap"  ) )
+	{
+		printf( "Program launched with -altremap commandline param. Using formula which better matches figure 4.7\n" );
+
+		bPerlinWorleyAltRemap = true;
+	}
 	//
 	// Exemple of tileable Perlin noise texture generation
 	//
@@ -133,8 +174,14 @@ int main (int argc, char *argv[])
 					// Perlin Worley is based on description in GPU Pro 7: Real Time Volumetric Cloudscapes.
 					// However it is not clear the text and the image are matching: images does not seem to match what the result  from the description in text would give.
 					// Also there are a lot of fudge factor in the code, e.g. *0.2, so it is really up to you to fine the formula you like.
-					//PerlinWorleyNoise = remap(worleyFBM, 0.0, 1.0, 0.0, perlinNoise);	// Matches better what figure 4.7 (not the following up text description p.101). Maps worley between newMin as 0 and 
-					PerlinWorleyNoise = remap(perlinNoise, 0.0f, 1.0f, worleyFBM, 1.0f);	// mapping perlin noise in between worley as minimum and 1.0 as maximum (as described in text of p.101 of GPU Pro 7) 
+					if( bPerlinWorleyAltRemap )
+					{
+						PerlinWorleyNoise = remap(worleyFBM, 0.0, 1.0, 0.0, perlinNoise);	// Matches better what figure 4.7 (not the following up text description p.101). Maps worley between newMin as 0 and 
+					}
+					else
+					{
+						PerlinWorleyNoise = remap(perlinNoise, 0.0f, 1.0f, worleyFBM, 1.0f);	// mapping perlin noise in between worley as minimum and 1.0 as maximum (as described in text of p.101 of GPU Pro 7) 
+					}
 				}
 
 				const float cellCount = 4;
@@ -178,10 +225,42 @@ int main (int argc, char *argv[])
 	}
 	); // end parallel_for
 	{
+		printf( "Base Noise generated successfully. Writing to %s folder...\n", OUTPUT_FOLDER_BASENOISE );
+
+#if SOURCE_ENGINE_VTEX
+		// output noises as separate slices to be compiled directly to Source Engine
+		int width = cloudBaseShapeTextureSize;
+		int height = cloudBaseShapeTextureSize;
+
+		for( int i = 0; i < cloudBaseShapeTextureSize; i++ )
+		{
+			char pName[256];
+			sprintf( pName, "%s/noiseShape_z%03d.tga", OUTPUT_FOLDER_BASENOISE, i );
+
+			writeTGA( pName, width, height, &cloudBaseShapeTexels[cloudBaseShapeSliceBytes * i] );
+		}
+
+		for( int i = 0; i < cloudBaseShapeTextureSize; i++ )
+		{
+			char pName[256];
+			sprintf( pName, "%s/noiseShape_packed_z%03d.tga", OUTPUT_FOLDER_BASENOISE, i );
+
+			writeTGA( pName, width, height, &cloudBaseShapeTexelsPacked[cloudBaseShapeSliceBytes * i] );
+		}
+
+		// generate a .txt script for vtex.exe
+		char pTxtName[256];
+		sprintf( pTxtName, "%s/noiseShape.txt", OUTPUT_FOLDER_BASENOISE );
+		writeDefaultVtexScript( pTxtName, 128 );
+
+		sprintf( pTxtName, "%s/noiseShape_packed.txt", OUTPUT_FOLDER_BASENOISE );
+		writeDefaultVtexScript( pTxtName, 128 );
+#else
 		int width = cloudBaseShapeTextureSize*cloudBaseShapeTextureSize;
 		int height = cloudBaseShapeTextureSize;
 		writeTGA("noiseShape.tga",       width, height, cloudBaseShapeTexels);
 		writeTGA("noiseShapePacked.tga", width, height, cloudBaseShapeTexelsPacked);
+#endif
 	}
 
 
@@ -247,11 +326,44 @@ int main (int argc, char *argv[])
 	}
 	); // end parallel_for
 	{
+		printf( "Erosion Noise generated successfully. Writing to %s folder...\n", OUTPUT_FOLDER_EROSION );
+
+#if SOURCE_ENGINE_VTEX
+		// output noises as separate slices to be compiled directly to Source Engine
+		int width = cloudErosionTextureSize;
+		int height = cloudErosionTextureSize;
+
+		for( int i = 0; i < cloudErosionTextureSize; i++ )
+		{
+			char pName[256];
+			sprintf( pName, "%s/noiseErosion_z%03d.tga", OUTPUT_FOLDER_EROSION, i );
+
+			writeTGA( pName, width, height, &cloudErosionTexels[cloudErosionSliceBytes * i] );
+		}
+
+		for( int i = 0; i < cloudErosionTextureSize; i++ )
+		{
+			char pName[256];
+			sprintf( pName, "%s/noiseErosion_packed_z%03d.tga", OUTPUT_FOLDER_EROSION, i );
+
+			writeTGA( pName, width, height, &cloudErosionTexelsPacked[cloudErosionSliceBytes * i] );
+		}
+
+		// generate a .txt script for vtex.exe
+		char pTxtName[256];
+		sprintf( pTxtName, "%s/noiseErosion.txt", OUTPUT_FOLDER_EROSION );
+		writeDefaultVtexScript( pTxtName, 32 );
+
+		sprintf( pTxtName, "%s/noiseErosion_packed.txt", OUTPUT_FOLDER_EROSION );
+		writeDefaultVtexScript( pTxtName, 32 );
+#else
 		int width = cloudErosionTextureSize*cloudErosionTextureSize;
 		int height = cloudErosionTextureSize;
 		writeTGA("noiseErosion.tga",       width, height, cloudErosionTexels);
 		writeTGA("noiseErosionPacked.tga", width, height, cloudErosionTexelsPacked);
+#endif
 	}
+
 
 #if 0
 	// Debug tileability using a 3x3 tile of the same slice, see if edges appears.
@@ -341,10 +453,12 @@ int main (int argc, char *argv[])
 	debugPrintTileability(addrSrcXZ, addrDst, "XZ");
 #endif
 
+	free(cloudBaseShapeTexels);
+	free(cloudBaseShapeTexelsPacked);
 	free(cloudErosionTexels);
 	free(cloudErosionTexelsPacked);
-	free(cloudErosionTexels);
-	free(cloudErosionTexelsPacked);
+
+	system( "pause" );
 
     return 0;
 }
